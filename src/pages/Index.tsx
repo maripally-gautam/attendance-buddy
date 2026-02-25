@@ -4,6 +4,7 @@ import SettingsCard from "@/components/SettingsCard";
 import DailyInputCard from "@/components/DailyInputCard";
 import ResultCard from "@/components/ResultCard";
 import PredictionCard from "@/components/PredictionCard";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const Index = () => {
   const {
@@ -23,10 +24,11 @@ const Index = () => {
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
       <div className="mx-auto max-w-md px-4 pb-10 pt-6 space-y-4">
         {/* Header */}
-        <div className="text-center">
+        <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-foreground tracking-tight">
             Attendance Calculator
           </h1>
+          <ThemeToggle />
         </div>
 
         {/* Error */}
@@ -40,10 +42,6 @@ const Index = () => {
         <ProgressCircle
           percentage={percentage}
           requiredPercentage={state.requiredPercentage}
-          presentCount={state.presentCount}
-          totalCount={state.totalCount}
-          bunksLeft={result?.bunksLeft ?? 0}
-          classesNeeded={result?.classesNeeded ?? 0}
         />
 
         {/* Settings */}
@@ -55,13 +53,11 @@ const Index = () => {
         {/* Result */}
         {result && <ResultCard result={result} />}
 
-        {/* Prediction */}
-        {result && (
-          <PredictionCard
-            onPredict={calculatePrediction}
-            prediction={prediction}
-          />
-        )}
+        {/* Prediction - always visible */}
+        <PredictionCard
+          onPredict={calculatePrediction}
+          prediction={prediction}
+        />
 
         {/* Reset */}
         {result && (

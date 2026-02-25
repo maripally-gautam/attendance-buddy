@@ -3,19 +3,11 @@ import { useEffect, useState, useRef } from "react";
 interface ProgressCircleProps {
   percentage: number;
   requiredPercentage: number;
-  presentCount: number;
-  totalCount: number;
-  bunksLeft: number;
-  classesNeeded: number;
 }
 
 export default function ProgressCircle({
   percentage,
   requiredPercentage,
-  presentCount,
-  totalCount,
-  bunksLeft,
-  classesNeeded,
 }: ProgressCircleProps) {
   const [displayPct, setDisplayPct] = useState(0);
   const animRef = useRef<number>(0);
@@ -53,8 +45,16 @@ export default function ProgressCircle({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [percentage]);
 
+  const statusText =
+    percentage >= requiredPercentage
+      ? "✅ On Track"
+      : percentage >= requiredPercentage - 5
+        ? "⚠️ Close to Threshold"
+        : "🔴 Below Required";
+
   return (
-    <div className="flex flex-col items-center gap-4 py-6">
+    <div className="flex flex-col items-center gap-3 py-6">
+      <p className="text-sm font-semibold text-muted-foreground">{statusText}</p>
       <div className="relative w-52 h-52">
         <svg className="w-full h-full -rotate-90" viewBox="0 0 200 200">
           <circle
@@ -84,23 +84,6 @@ export default function ProgressCircle({
           </span>
           <span className="text-xs text-muted-foreground mt-1">Attendance</span>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 w-full max-w-xs">
-        {[
-          { label: "Present", value: presentCount },
-          { label: "Total", value: totalCount },
-          { label: "Bunks Left", value: bunksLeft },
-          { label: "Need", value: classesNeeded },
-        ].map((item) => (
-          <div
-            key={item.label}
-            className="rounded-xl bg-card/60 backdrop-blur-sm border border-border/50 px-4 py-3 text-center"
-          >
-            <p className="text-lg font-semibold text-foreground">{item.value}</p>
-            <p className="text-[11px] text-muted-foreground">{item.label}</p>
-          </div>
-        ))}
       </div>
     </div>
   );
