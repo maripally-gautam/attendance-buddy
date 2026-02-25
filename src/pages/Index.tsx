@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAttendance } from "@/hooks/useAttendance";
 import ProgressCircle from "@/components/ProgressCircle";
 import SettingsCard from "@/components/SettingsCard";
-import DailyInputCard from "@/components/DailyInputCard";
+import InputCard from "@/components/DailyInputCard";
 import ResultCard from "@/components/ResultCard";
 import PredictionCard from "@/components/PredictionCard";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -19,10 +19,8 @@ const Index = () => {
     calculatePrediction,
   } = useAttendance();
 
-  // Lifted daily input state so prediction can read it live
-  const [dailyStatus, setDailyStatus] = useState<"present" | "absent">("present");
-  const [dailyClasses, setDailyClasses] = useState("");
-  const [dailyTotal, setDailyTotal] = useState("");
+  const [present, setPresent] = useState(state.presentCount > 0 ? String(state.presentCount) : "");
+  const [total, setTotal] = useState(state.totalCount > 0 ? String(state.totalCount) : "");
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
@@ -48,30 +46,25 @@ const Index = () => {
           requiredPercentage={state.requiredPercentage}
         />
 
-        {/* Daily Input */}
-        <DailyInputCard
+        {/* Input */}
+        <InputCard
           onCalculate={calculateAttendance}
-          status={dailyStatus}
-          setStatus={setDailyStatus}
-          classesToday={dailyClasses}
-          setClassesToday={setDailyClasses}
-          totalToday={dailyTotal}
-          setTotalToday={setDailyTotal}
+          present={present}
+          setPresent={setPresent}
+          total={total}
+          setTotal={setTotal}
         />
 
         {/* Result */}
         {result && <ResultCard result={result} />}
 
-        {/* Prediction - always visible, reads daily input live */}
+        {/* Prediction */}
         <PredictionCard
           onPredict={calculatePrediction}
           prediction={prediction}
-          dailyStatus={dailyStatus}
-          dailyClasses={dailyClasses}
-          dailyTotal={dailyTotal}
         />
 
-        {/* Settings at bottom */}
+        {/* Settings */}
         <SettingsCard state={state} onUpdate={updateSettings} />
       </div>
     </div>

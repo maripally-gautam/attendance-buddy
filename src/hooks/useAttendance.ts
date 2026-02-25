@@ -9,6 +9,7 @@ export interface AttendanceState {
 }
 
 export interface CalculationResult {
+  currentPercentage: number;
   classesNeeded: number;
   bunksLeft: number;
   classesNeededDays: number;
@@ -26,22 +27,19 @@ export interface PredictionResult {
 }
 
 const SETTINGS_KEY = "attendance-calculator-settings";
-const COUNTERS_KEY = "attendance-calculator-counters";
 
 function loadState(): AttendanceState {
   try {
     const settings = localStorage.getItem(SETTINGS_KEY);
-    const counters = sessionStorage.getItem(COUNTERS_KEY);
     const s = settings ? JSON.parse(settings) : {};
-    const c = counters ? JSON.parse(counters) : {};
     return {
       requiredPercentage: s.requiredPercentage ?? 75,
       classesPerDay: s.classesPerDay ?? 5,
       daysPerWeek: s.daysPerWeek ?? 6,
-      presentCount: c.presentCount ?? 0,
-      totalCount: c.totalCount ?? 0,
+      presentCount: s.presentCount ?? 0,
+      totalCount: s.totalCount ?? 0,
     };
-  } catch {}
+  } catch { }
   return {
     requiredPercentage: 75,
     classesPerDay: 5,
@@ -53,42 +51,66 @@ function loadState(): AttendanceState {
 
 function saveState(state: AttendanceState) {
   try {
-    localStorage.setItem(
-      SETTINGS_KEY,
-      JSON.stringify({
-        requiredPercentage: state.requiredPercentage,
-        classesPerDay: state.classesPerDay,
-        daysPerWeek: state.daysPerWeek,
-      })
-    );
-    sessionStorage.setItem(
-      COUNTERS_KEY,
-      JSON.stringify({
-        presentCount: state.presentCount,
-        totalCount: state.totalCount,
-      })
-    );
-  } catch {}
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(state));
+  } catch { }
 }
 
-/** Compute classes needed and bunks left given present/total/required */
-function computeMetrics(present: number, total: number, requiredPct: number) {
-  const req = requiredPct / 100;
-  const pct = total === 0 ? 0 : (present / total) * 100;
+// 📌 1. attendancePercentage = (presentDays / totalDays) * 100, round 2
+function calcPercentage(present: number, total: number): number {
+  if (total === 0) return 0;
+  return parseFloat(((present / total) * 100).toFixed(2));
+}
 
-  let classesNeeded = 0;
-  if (pct < requiredPct && req < 1) {
-    classesNeeded = Math.ceil((req * total - present) / (1 - req));
-    if (classesNeeded < 0) classesNeeded = 0;
-  }
+// 📌 2. requiredClasses = ((R/100)*T - P) / (1 - R/100). If <0 → 0, else ceil()
+function calcClassesNeeded(P: number, T: number, R: number): number {
+  const r = R / 100;
+  if (r >= 1) return Infinity;
+  const needed = (r * T - P) / (1 - r);
+  if (needed <= 0) return 0;
+  return Math.ceil(needed);
+}
 
-  let bunksLeft = 0;
-  if (req > 0) {
-    bunksLeft = Math.floor(present / req - total);
-    if (bunksLeft < 0) bunksLeft = 0;
-  }
+// 📌 3. allowedBunks = (P / (R/100)) - T. If <0 → 0, else floor()
+function calcBunksLeft(P: number, T: number, R: number): number {
+  const r = R / 100;
+  if (r <= 0) return Infinity;
+  const bunks = P / r - T;
+  if (bunks <= 0) return 0;
+  return Math.floor(bunks);
+}
 
-  return { pct, classesNeeded, bunksLeft };
+// 📌 4. days = classes / classesPerDay, round 2
+function classesToDays(classes: number, classesPerDay: number): number {
+  if (classesPerDay <= 0) return 0;
+  return parseFloat((classes / classesPerDay).toFixed(2));
+}
+
+// 📌 5. weeks = (classes / classesPerDay) / daysPerWeek, round 2
+function classesToWeeks(classes: number, classesPerDay: number, daysPerWeek: number): number {
+  if (classesPerDay <= 0 || daysPerWeek <= 0) return 0;
+  const days = classes / classesPerDay;
+  return parseFloat((days / daysPerWeek).toFixed(2));
+}
+
+// 📌 6. classes = days * classesPerDay
+function daysToClasses(days: number, classesPerDay: number): number {
+  return days * classesPerDay;
+}
+
+// 📌 7. days = weeks * daysPerWeek; classes = days * classesPerDay
+function weeksToClasses(weeks: number, daysPerWeek: number, classesPerDay: number): number {
+  return weeks * daysPerWeek * classesPerDay;
+}
+
+function convertToClasses(
+  value: number,
+  unit: "classes" | "days" | "weeks",
+  classesPerDay: number,
+  daysPerWeek: number
+): number {
+  if (unit === "days") return Math.round(daysToClasses(value, classesPerDay));
+  if (unit === "weeks") return Math.round(weeksToClasses(value, daysPerWeek, classesPerDay));
+  return Math.round(value);
 }
 
 export function useAttendance() {
@@ -97,13 +119,8 @@ export function useAttendance() {
   const [prediction, setPrediction] = useState<PredictionResult | null>(null);
   const [error, setError] = useState<string>("");
 
-  // Track what was last added so re-clicking same inputs doesn't accumulate
-  const [lastAdded, setLastAdded] = useState<{ present: number; total: number } | null>(null);
-
-  const percentage =
-    state.totalCount > 0
-      ? parseFloat(((state.presentCount / state.totalCount) * 100).toFixed(2))
-      : 0;
+  // 📌 1. Current percentage based on entered values
+  const percentage = calcPercentage(state.presentCount, state.totalCount);
 
   useEffect(() => {
     saveState(state);
@@ -125,12 +142,9 @@ export function useAttendance() {
     return null;
   }, [state]);
 
+  // Calculate attendance based on entered present & total values
   const calculateAttendance = useCallback(
-    (
-      status: "present" | "absent",
-      classesToday: number,
-      totalToday: number
-    ): boolean => {
+    (present: number, total: number): boolean => {
       setError("");
       setPrediction(null);
 
@@ -139,93 +153,58 @@ export function useAttendance() {
         setError(settingsError);
         return false;
       }
-      if (totalToday <= 0 || !Number.isFinite(totalToday)) {
-        setError("Total classes today must be a positive number.");
+      if (!Number.isFinite(total) || total <= 0) {
+        setError("Total classes must be a positive number.");
         return false;
       }
-      if (classesToday < 0 || !Number.isFinite(classesToday)) {
-        setError("Value must be a non-negative number.");
+      if (!Number.isFinite(present) || present < 0) {
+        setError("Present classes must be a non-negative number.");
         return false;
       }
-      if (classesToday > totalToday) {
-        setError(
-          status === "present"
-            ? "Present classes cannot exceed total classes."
-            : "Absent classes cannot exceed total classes."
-        );
+      if (present > total) {
+        setError("Present classes cannot exceed total classes.");
         return false;
       }
 
-      const presentToAdd =
-        status === "present" ? classesToday : totalToday - classesToday;
+      // Store the values
+      setState((prev) => ({
+        ...prev,
+        presentCount: present,
+        totalCount: total,
+      }));
 
-      // Undo last addition if re-clicking with same/different values
-      setState((prev) => {
-        let basePresent = prev.presentCount;
-        let baseTotal = prev.totalCount;
-
-        if (lastAdded) {
-          basePresent -= lastAdded.present;
-          baseTotal -= lastAdded.total;
-        }
-
-        const newPresent = basePresent + presentToAdd;
-        const newTotal = baseTotal + totalToday;
-
-        return {
-          ...prev,
-          presentCount: newPresent,
-          totalCount: newTotal,
-        };
-      });
-
-      setLastAdded({ present: presentToAdd, total: totalToday });
-
-      // Compute result using the new values
-      // We need to calculate based on what state WILL be
-      const basePresent = lastAdded
-        ? state.presentCount - lastAdded.present
-        : state.presentCount;
-      const baseTotal = lastAdded
-        ? state.totalCount - lastAdded.total
-        : state.totalCount;
-
-      const newPresent = basePresent + presentToAdd;
-      const newTotal = baseTotal + totalToday;
-
-      const { classesNeeded, bunksLeft } = computeMetrics(
-        newPresent,
-        newTotal,
-        state.requiredPercentage
-      );
-
+      const R = state.requiredPercentage;
       const cpd = state.classesPerDay;
       const dpw = state.daysPerWeek;
 
+      const currentPct = calcPercentage(present, total);
+      const classesNeeded = calcClassesNeeded(present, total, R);
+      const bunksLeft = calcBunksLeft(present, total, R);
+
       setResult({
+        currentPercentage: currentPct,
         classesNeeded,
         bunksLeft,
-        classesNeededDays: parseFloat((classesNeeded / cpd).toFixed(2)),
-        classesNeededWeeks: parseFloat(
-          (classesNeeded / (cpd * dpw)).toFixed(2)
-        ),
-        bunksLeftDays: parseFloat((bunksLeft / cpd).toFixed(2)),
-        bunksLeftWeeks: parseFloat((bunksLeft / (cpd * dpw)).toFixed(2)),
+        classesNeededDays: classesToDays(classesNeeded, cpd),
+        classesNeededWeeks: classesToWeeks(classesNeeded, cpd, dpw),
+        bunksLeftDays: classesToDays(bunksLeft, cpd),
+        bunksLeftWeeks: classesToWeeks(bunksLeft, cpd, dpw),
       });
 
       return true;
     },
-    [state, validateSettings, lastAdded]
+    [state, validateSettings]
   );
 
+  // 📌 8. Future attendance prediction
+  // Convert input to classes → N
+  // Present: newPresent = P + N, newTotal = T + N
+  // Absent:  newPresent = P,     newTotal = T + N
   const calculatePrediction = useCallback(
     (
       value: number,
       unit: "classes" | "days" | "weeks",
-      status: "present" | "absent",
-      dailyStatus?: "present" | "absent",
-      dailyClasses?: number,
-      dailyTotal?: number
+      status: "present" | "absent"
     ): boolean => {
       setError("");
 
@@ -240,66 +219,37 @@ export function useAttendance() {
         return false;
       }
 
-      // Start from base counters (undo lastAdded to get clean base)
-      let basePresent = state.presentCount;
-      let baseTotal = state.totalCount;
-
-      if (lastAdded) {
-        basePresent -= lastAdded.present;
-        baseTotal -= lastAdded.total;
+      if (state.totalCount === 0) {
+        setError("Please calculate your current attendance first.");
+        return false;
       }
 
-      // Add the daily input if provided (whether or not "show current" was clicked)
-      if (
-        dailyTotal != null &&
-        dailyTotal > 0 &&
-        dailyClasses != null &&
-        dailyClasses >= 0 &&
-        dailyClasses <= dailyTotal
-      ) {
-        const dailyPresent =
-          dailyStatus === "present"
-            ? dailyClasses
-            : dailyTotal - dailyClasses;
-        basePresent += dailyPresent;
-        baseTotal += dailyTotal;
-      } else if (lastAdded) {
-        // If daily input is invalid but we have lastAdded (user already clicked show current), use that
-        basePresent += lastAdded.present;
-        baseTotal += lastAdded.total;
-      }
-
-      // Now add prediction
-      let classes = value;
-      if (unit === "days") classes = value * state.classesPerDay;
-      if (unit === "weeks")
-        classes = value * state.daysPerWeek * state.classesPerDay;
-      classes = Math.round(classes);
-
-      const addPresent = status === "present" ? classes : 0;
-      const newPresent = basePresent + addPresent;
-      const newTotal = baseTotal + classes;
-
-      const { pct, classesNeeded, bunksLeft } = computeMetrics(
-        newPresent,
-        newTotal,
-        state.requiredPercentage
-      );
-
+      const P = state.presentCount;
+      const T = state.totalCount;
+      const R = state.requiredPercentage;
       const cpd = state.classesPerDay;
       const dpw = state.daysPerWeek;
 
+      const N = convertToClasses(value, unit, cpd, dpw);
+
+      const newPresent = status === "present" ? P + N : P;
+      const newTotal = T + N;
+
+      const futurePercentage = calcPercentage(newPresent, newTotal);
+      const classesNeeded = calcClassesNeeded(newPresent, newTotal, R);
+      const bunksLeft = calcBunksLeft(newPresent, newTotal, R);
+
       setPrediction({
-        percentage: parseFloat(pct.toFixed(2)),
+        percentage: futurePercentage,
         classesNeeded,
         bunksLeft,
-        days: parseFloat((classesNeeded / cpd).toFixed(2)),
-        weeks: parseFloat((classesNeeded / (cpd * dpw)).toFixed(2)),
+        days: classesToDays(classesNeeded, cpd),
+        weeks: classesToWeeks(classesNeeded, cpd, dpw),
       });
 
       return true;
     },
-    [state, validateSettings, lastAdded]
+    [state, validateSettings]
   );
 
   return {
