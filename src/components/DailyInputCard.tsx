@@ -1,19 +1,26 @@
-import { useState } from "react";
-
 interface DailyInputCardProps {
   onCalculate: (status: "present" | "absent", classesToday: number, totalToday: number) => boolean;
+  status: "present" | "absent";
+  setStatus: (s: "present" | "absent") => void;
+  classesToday: string;
+  setClassesToday: (v: string) => void;
+  totalToday: string;
+  setTotalToday: (v: string) => void;
 }
 
-export default function DailyInputCard({ onCalculate }: DailyInputCardProps) {
-  const [status, setStatus] = useState<"present" | "absent">("present");
-  const [classesToday, setClassesToday] = useState("");
-  const [totalToday, setTotalToday] = useState("");
-
+export default function DailyInputCard({
+  onCalculate,
+  status,
+  setStatus,
+  classesToday,
+  setClassesToday,
+  totalToday,
+  setTotalToday,
+}: DailyInputCardProps) {
   const handleSubmit = () => {
     const count = parseFloat(classesToday);
     const total = parseFloat(totalToday);
     onCalculate(status, count, total);
-    // Inputs are NOT cleared after submission
   };
 
   return (

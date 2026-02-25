@@ -2,11 +2,27 @@ import { useState } from "react";
 import { PredictionResult } from "@/hooks/useAttendance";
 
 interface PredictionCardProps {
-  onPredict: (value: number, unit: "classes" | "days" | "weeks", status: "present" | "absent") => boolean;
+  onPredict: (
+    value: number,
+    unit: "classes" | "days" | "weeks",
+    status: "present" | "absent",
+    dailyStatus: "present" | "absent",
+    dailyClasses: number,
+    dailyTotal: number
+  ) => boolean;
   prediction: PredictionResult | null;
+  dailyStatus: "present" | "absent";
+  dailyClasses: string;
+  dailyTotal: string;
 }
 
-export default function PredictionCard({ onPredict, prediction }: PredictionCardProps) {
+export default function PredictionCard({
+  onPredict,
+  prediction,
+  dailyStatus,
+  dailyClasses,
+  dailyTotal,
+}: PredictionCardProps) {
   const [value, setValue] = useState("");
   const [unit, setUnit] = useState<"classes" | "days" | "weeks">("classes");
   const [status, setStatus] = useState<"present" | "absent">("present");
@@ -53,10 +69,19 @@ export default function PredictionCard({ onPredict, prediction }: PredictionCard
         </div>
       </div>
       <button
-        onClick={() => onPredict(parseFloat(value), unit, status)}
+        onClick={() =>
+          onPredict(
+            parseFloat(value),
+            unit,
+            status,
+            dailyStatus,
+            parseFloat(dailyClasses) || 0,
+            parseFloat(dailyTotal) || 0
+          )
+        }
         className="w-full rounded-xl bg-primary text-primary-foreground py-3 text-sm font-semibold active:scale-[0.98] transition-transform"
       >
-        Show After
+        Show Future Attendance
       </button>
 
       {prediction && (
