@@ -71,13 +71,35 @@ function saveState(state: AttendanceState) {
   } catch {}
 }
 
+/** Compute classes needed and bunks left given present/total/required */
+function computeMetrics(present: number, total: number, requiredPct: number) {
+  const req = requiredPct / 100;
+  const pct = total === 0 ? 0 : (present / total) * 100;
+
+  let classesNeeded = 0;
+  if (pct < requiredPct && req < 1) {
+    classesNeeded = Math.ceil((req * total - present) / (1 - req));
+    if (classesNeeded < 0) classesNeeded = 0;
+  }
+
+  let bunksLeft = 0;
+  if (req > 0) {
+    bunksLeft = Math.floor(present / req - total);
+    if (bunksLeft < 0) bunksLeft = 0;
+  }
+
+  return { pct, classesNeeded, bunksLeft };
+}
+
 export function useAttendance() {
   const [state, setState] = useState<AttendanceState>(loadState);
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [prediction, setPrediction] = useState<PredictionResult | null>(null);
   const [error, setError] = useState<string>("");
 
-  // Derived percentage from state directly
+  // Track what was last added so re-clicking same inputs doesn't accumulate
+  const [lastAdded, setLastAdded] = useState<{ present: number; total: number } | null>(null);
+
   const percentage =
     state.totalCount > 0
       ? parseFloat(((state.presentCount / state.totalCount) * 100).toFixed(2))
@@ -134,35 +156,48 @@ export function useAttendance() {
         return false;
       }
 
-      // When present: classesToday = attended classes
-      // When absent: classesToday = missed classes, so attended = total - absent
       const presentToAdd =
         status === "present" ? classesToday : totalToday - classesToday;
-      const newPresent = state.presentCount + presentToAdd;
-      const newTotal = state.totalCount + totalToday;
 
-      setState((prev) => ({
-        ...prev,
-        presentCount: newPresent,
-        totalCount: newTotal,
-      }));
+      // Undo last addition if re-clicking with same/different values
+      setState((prev) => {
+        let basePresent = prev.presentCount;
+        let baseTotal = prev.totalCount;
 
-      const req = state.requiredPercentage / 100;
-      const newPct = newTotal === 0 ? 0 : (newPresent / newTotal) * 100;
+        if (lastAdded) {
+          basePresent -= lastAdded.present;
+          baseTotal -= lastAdded.total;
+        }
 
-      let classesNeeded = 0;
-      if (newPct < state.requiredPercentage && req < 1) {
-        classesNeeded = Math.ceil(
-          (req * newTotal - newPresent) / (1 - req)
-        );
-        if (classesNeeded < 0) classesNeeded = 0;
-      }
+        const newPresent = basePresent + presentToAdd;
+        const newTotal = baseTotal + totalToday;
 
-      let bunksLeft = 0;
-      if (req > 0) {
-        bunksLeft = Math.floor(newPresent / req - newTotal);
-        if (bunksLeft < 0) bunksLeft = 0;
-      }
+        return {
+          ...prev,
+          presentCount: newPresent,
+          totalCount: newTotal,
+        };
+      });
+
+      setLastAdded({ present: presentToAdd, total: totalToday });
+
+      // Compute result using the new values
+      // We need to calculate based on what state WILL be
+      const basePresent = lastAdded
+        ? state.presentCount - lastAdded.present
+        : state.presentCount;
+      const baseTotal = lastAdded
+        ? state.totalCount - lastAdded.total
+        : state.totalCount;
+
+      const newPresent = basePresent + presentToAdd;
+      const newTotal = baseTotal + totalToday;
+
+      const { classesNeeded, bunksLeft } = computeMetrics(
+        newPresent,
+        newTotal,
+        state.requiredPercentage
+      );
 
       const cpd = state.classesPerDay;
       const dpw = state.daysPerWeek;
@@ -180,14 +215,17 @@ export function useAttendance() {
 
       return true;
     },
-    [state, validateSettings]
+    [state, validateSettings, lastAdded]
   );
 
   const calculatePrediction = useCallback(
     (
       value: number,
       unit: "classes" | "days" | "weeks",
-      status: "present" | "absent"
+      status: "present" | "absent",
+      dailyStatus?: "present" | "absent",
+      dailyClasses?: number,
+      dailyTotal?: number
     ): boolean => {
       setError("");
 
@@ -202,6 +240,36 @@ export function useAttendance() {
         return false;
       }
 
+      // Start from base counters (undo lastAdded to get clean base)
+      let basePresent = state.presentCount;
+      let baseTotal = state.totalCount;
+
+      if (lastAdded) {
+        basePresent -= lastAdded.present;
+        baseTotal -= lastAdded.total;
+      }
+
+      // Add the daily input if provided (whether or not "show current" was clicked)
+      if (
+        dailyTotal != null &&
+        dailyTotal > 0 &&
+        dailyClasses != null &&
+        dailyClasses >= 0 &&
+        dailyClasses <= dailyTotal
+      ) {
+        const dailyPresent =
+          dailyStatus === "present"
+            ? dailyClasses
+            : dailyTotal - dailyClasses;
+        basePresent += dailyPresent;
+        baseTotal += dailyTotal;
+      } else if (lastAdded) {
+        // If daily input is invalid but we have lastAdded (user already clicked show current), use that
+        basePresent += lastAdded.present;
+        baseTotal += lastAdded.total;
+      }
+
+      // Now add prediction
       let classes = value;
       if (unit === "days") classes = value * state.classesPerDay;
       if (unit === "weeks")
@@ -209,25 +277,14 @@ export function useAttendance() {
       classes = Math.round(classes);
 
       const addPresent = status === "present" ? classes : 0;
-      const newPresent = state.presentCount + addPresent;
-      const newTotal = state.totalCount + classes;
+      const newPresent = basePresent + addPresent;
+      const newTotal = baseTotal + classes;
 
-      const pct = newTotal === 0 ? 0 : (newPresent / newTotal) * 100;
-      const req = state.requiredPercentage / 100;
-
-      let classesNeeded = 0;
-      if (pct < state.requiredPercentage && req < 1) {
-        classesNeeded = Math.ceil(
-          (req * newTotal - newPresent) / (1 - req)
-        );
-        if (classesNeeded < 0) classesNeeded = 0;
-      }
-
-      let bunksLeft = 0;
-      if (req > 0) {
-        bunksLeft = Math.floor(newPresent / req - newTotal);
-        if (bunksLeft < 0) bunksLeft = 0;
-      }
+      const { pct, classesNeeded, bunksLeft } = computeMetrics(
+        newPresent,
+        newTotal,
+        state.requiredPercentage
+      );
 
       const cpd = state.classesPerDay;
       const dpw = state.daysPerWeek;
@@ -242,7 +299,7 @@ export function useAttendance() {
 
       return true;
     },
-    [state, validateSettings]
+    [state, validateSettings, lastAdded]
   );
 
   return {

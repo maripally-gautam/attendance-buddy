@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAttendance } from "@/hooks/useAttendance";
 import ProgressCircle from "@/components/ProgressCircle";
 import SettingsCard from "@/components/SettingsCard";
@@ -17,6 +18,11 @@ const Index = () => {
     calculateAttendance,
     calculatePrediction,
   } = useAttendance();
+
+  // Lifted daily input state so prediction can read it live
+  const [dailyStatus, setDailyStatus] = useState<"present" | "absent">("present");
+  const [dailyClasses, setDailyClasses] = useState("");
+  const [dailyTotal, setDailyTotal] = useState("");
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
@@ -42,20 +48,31 @@ const Index = () => {
           requiredPercentage={state.requiredPercentage}
         />
 
-        {/* Settings */}
-        <SettingsCard state={state} onUpdate={updateSettings} />
-
         {/* Daily Input */}
-        <DailyInputCard onCalculate={calculateAttendance} />
+        <DailyInputCard
+          onCalculate={calculateAttendance}
+          status={dailyStatus}
+          setStatus={setDailyStatus}
+          classesToday={dailyClasses}
+          setClassesToday={setDailyClasses}
+          totalToday={dailyTotal}
+          setTotalToday={setDailyTotal}
+        />
 
         {/* Result */}
         {result && <ResultCard result={result} />}
 
-        {/* Prediction - always visible */}
+        {/* Prediction - always visible, reads daily input live */}
         <PredictionCard
           onPredict={calculatePrediction}
           prediction={prediction}
+          dailyStatus={dailyStatus}
+          dailyClasses={dailyClasses}
+          dailyTotal={dailyTotal}
         />
+
+        {/* Settings at bottom */}
+        <SettingsCard state={state} onUpdate={updateSettings} />
       </div>
     </div>
   );
