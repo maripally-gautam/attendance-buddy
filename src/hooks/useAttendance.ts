@@ -77,7 +77,7 @@ export function useAttendance() {
   }, [state]);
 
   const calculateAttendance = useCallback(
-    (status: "present" | "absent", classesToday: number): boolean => {
+    (status: "present" | "absent", classesToday: number, totalToday: number): boolean => {
       setError("");
       setPrediction(null);
 
@@ -86,19 +86,22 @@ export function useAttendance() {
         setError(settingsError);
         return false;
       }
-      if (classesToday <= 0 || !Number.isFinite(classesToday)) {
+      if (totalToday <= 0 || !Number.isFinite(totalToday)) {
         setError("Total classes today must be a positive number.");
+        return false;
+      }
+      if (classesToday < 0 || !Number.isFinite(classesToday)) {
+        setError("Present classes must be a non-negative number.");
+        return false;
+      }
+      if (status === "present" && classesToday > totalToday) {
+        setError("Present classes cannot exceed total classes.");
         return false;
       }
 
       const presentToAdd = status === "present" ? classesToday : 0;
       const newPresent = state.presentCount + presentToAdd;
-      const newTotal = state.totalCount + classesToday;
-
-      if (newPresent > newTotal) {
-        setError("Present count cannot exceed total count.");
-        return false;
-      }
+      const newTotal = state.totalCount + totalToday;
 
       setState((prev) => ({
         ...prev,
@@ -151,10 +154,6 @@ export function useAttendance() {
     ): boolean => {
       setError("");
 
-      if (!result) {
-        setError("Please calculate current attendance first.");
-        return false;
-      }
       if (value <= 0 || !Number.isFinite(value)) {
         setError("Prediction value must be a positive number.");
         return false;

@@ -1,17 +1,20 @@
 import { useState } from "react";
 
 interface DailyInputCardProps {
-  onCalculate: (status: "present" | "absent", classesToday: number) => boolean;
+  onCalculate: (status: "present" | "absent", classesToday: number, totalToday: number) => boolean;
 }
 
 export default function DailyInputCard({ onCalculate }: DailyInputCardProps) {
   const [status, setStatus] = useState<"present" | "absent">("present");
   const [classesToday, setClassesToday] = useState("");
+  const [totalToday, setTotalToday] = useState("");
 
   const handleSubmit = () => {
-    const val = parseFloat(classesToday);
-    if (onCalculate(status, val)) {
+    const present = parseFloat(classesToday);
+    const total = parseFloat(totalToday);
+    if (onCalculate(status, present, total)) {
       setClassesToday("");
+      setTotalToday("");
     }
   };
 
@@ -20,7 +23,7 @@ export default function DailyInputCard({ onCalculate }: DailyInputCardProps) {
       <h2 className="text-sm font-semibold text-foreground tracking-wide uppercase">
         📋 Daily Input
       </h2>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <div className="flex flex-col gap-1">
           <label className="text-[11px] text-muted-foreground">Status</label>
           <select
@@ -33,13 +36,24 @@ export default function DailyInputCard({ onCalculate }: DailyInputCardProps) {
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] text-muted-foreground">Classes Today</label>
+          <label className="text-[11px] text-muted-foreground">Present</label>
+          <input
+            type="number"
+            inputMode="numeric"
+            placeholder="e.g. 4"
+            value={classesToday}
+            onChange={(e) => setClassesToday(e.target.value)}
+            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] text-muted-foreground">Total</label>
           <input
             type="number"
             inputMode="numeric"
             placeholder="e.g. 5"
-            value={classesToday}
-            onChange={(e) => setClassesToday(e.target.value)}
+            value={totalToday}
+            onChange={(e) => setTotalToday(e.target.value)}
             className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
         </div>
