@@ -10,12 +10,10 @@ export default function DailyInputCard({ onCalculate }: DailyInputCardProps) {
   const [totalToday, setTotalToday] = useState("");
 
   const handleSubmit = () => {
-    const present = parseFloat(classesToday);
+    const count = parseFloat(classesToday);
     const total = parseFloat(totalToday);
-    if (onCalculate(status, present, total)) {
-      setClassesToday("");
-      setTotalToday("");
-    }
+    onCalculate(status, count, total);
+    // Inputs are NOT cleared after submission
   };
 
   return (
@@ -36,11 +34,13 @@ export default function DailyInputCard({ onCalculate }: DailyInputCardProps) {
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] text-muted-foreground">Present</label>
+          <label className="text-[11px] text-muted-foreground">
+            {status === "present" ? "Present" : "Absent"}
+          </label>
           <input
             type="number"
             inputMode="numeric"
-            placeholder="e.g. 4"
+            placeholder={status === "present" ? "e.g. 4" : "e.g. 1"}
             value={classesToday}
             onChange={(e) => setClassesToday(e.target.value)}
             className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"

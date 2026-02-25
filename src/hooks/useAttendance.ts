@@ -9,7 +9,6 @@ export interface AttendanceState {
 }
 
 export interface CalculationResult {
-  percentage: number;
   classesNeeded: number;
   bunksLeft: number;
   classesNeededDays: number;
@@ -26,14 +25,22 @@ export interface PredictionResult {
   weeks: number;
 }
 
-const STORAGE_KEY = "attendance-calculator-state";
+const SETTINGS_KEY = "attendance-calculator-settings";
+const COUNTERS_KEY = "attendance-calculator-counters";
 
 function loadState(): AttendanceState {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      return JSON.parse(saved);
-    }
+    const settings = localStorage.getItem(SETTINGS_KEY);
+    const counters = sessionStorage.getItem(COUNTERS_KEY);
+    const s = settings ? JSON.parse(settings) : {};
+    const c = counters ? JSON.parse(counters) : {};
+    return {
+      requiredPercentage: s.requiredPercentage ?? 75,
+      classesPerDay: s.classesPerDay ?? 5,
+      daysPerWeek: s.daysPerWeek ?? 6,
+      presentCount: c.presentCount ?? 0,
+      totalCount: c.totalCount ?? 0,
+    };
   } catch {}
   return {
     requiredPercentage: 75,
@@ -46,7 +53,21 @@ function loadState(): AttendanceState {
 
 function saveState(state: AttendanceState) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify({
+        requiredPercentage: state.requiredPercentage,
+        classesPerDay: state.classesPerDay,
+        daysPerWeek: state.daysPerWeek,
+      })
+    );
+    sessionStorage.setItem(
+      COUNTERS_KEY,
+      JSON.stringify({
+        presentCount: state.presentCount,
+        totalCount: state.totalCount,
+      })
+    );
   } catch {}
 }
 
@@ -55,6 +76,12 @@ export function useAttendance() {
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [prediction, setPrediction] = useState<PredictionResult | null>(null);
   const [error, setError] = useState<string>("");
+
+  // Derived percentage from state directly
+  const percentage =
+    state.totalCount > 0
+      ? parseFloat(((state.presentCount / state.totalCount) * 100).toFixed(2))
+      : 0;
 
   useEffect(() => {
     saveState(state);
@@ -77,7 +104,11 @@ export function useAttendance() {
   }, [state]);
 
   const calculateAttendance = useCallback(
-    (status: "present" | "absent", classesToday: number, totalToday: number): boolean => {
+    (
+      status: "present" | "absent",
+      classesToday: number,
+      totalToday: number
+    ): boolean => {
       setError("");
       setPrediction(null);
 
@@ -91,15 +122,22 @@ export function useAttendance() {
         return false;
       }
       if (classesToday < 0 || !Number.isFinite(classesToday)) {
-        setError("Present classes must be a non-negative number.");
+        setError("Value must be a non-negative number.");
         return false;
       }
-      if (status === "present" && classesToday > totalToday) {
-        setError("Present classes cannot exceed total classes.");
+      if (classesToday > totalToday) {
+        setError(
+          status === "present"
+            ? "Present classes cannot exceed total classes."
+            : "Absent classes cannot exceed total classes."
+        );
         return false;
       }
 
-      const presentToAdd = status === "present" ? classesToday : 0;
+      // When present: classesToday = attended classes
+      // When absent: classesToday = missed classes, so attended = total - absent
+      const presentToAdd =
+        status === "present" ? classesToday : totalToday - classesToday;
       const newPresent = state.presentCount + presentToAdd;
       const newTotal = state.totalCount + totalToday;
 
@@ -109,17 +147,17 @@ export function useAttendance() {
         totalCount: newTotal,
       }));
 
-      const percentage = newTotal === 0 ? 0 : (newPresent / newTotal) * 100;
       const req = state.requiredPercentage / 100;
+      const newPct = newTotal === 0 ? 0 : (newPresent / newTotal) * 100;
 
-      // Classes needed to reach required %: solve (present + x) / (total + x) >= req
       let classesNeeded = 0;
-      if (percentage < state.requiredPercentage && req < 1) {
-        classesNeeded = Math.ceil((req * newTotal - newPresent) / (1 - req));
+      if (newPct < state.requiredPercentage && req < 1) {
+        classesNeeded = Math.ceil(
+          (req * newTotal - newPresent) / (1 - req)
+        );
         if (classesNeeded < 0) classesNeeded = 0;
       }
 
-      // Bunks left: solve present / (total + x) >= req => x <= present/req - total
       let bunksLeft = 0;
       if (req > 0) {
         bunksLeft = Math.floor(newPresent / req - newTotal);
@@ -130,7 +168,6 @@ export function useAttendance() {
       const dpw = state.daysPerWeek;
 
       setResult({
-        percentage: parseFloat(percentage.toFixed(2)),
         classesNeeded,
         bunksLeft,
         classesNeededDays: parseFloat((classesNeeded / cpd).toFixed(2)),
@@ -175,12 +212,14 @@ export function useAttendance() {
       const newPresent = state.presentCount + addPresent;
       const newTotal = state.totalCount + classes;
 
-      const percentage = newTotal === 0 ? 0 : (newPresent / newTotal) * 100;
+      const pct = newTotal === 0 ? 0 : (newPresent / newTotal) * 100;
       const req = state.requiredPercentage / 100;
 
       let classesNeeded = 0;
-      if (percentage < state.requiredPercentage && req < 1) {
-        classesNeeded = Math.ceil((req * newTotal - newPresent) / (1 - req));
+      if (pct < state.requiredPercentage && req < 1) {
+        classesNeeded = Math.ceil(
+          (req * newTotal - newPresent) / (1 - req)
+        );
         if (classesNeeded < 0) classesNeeded = 0;
       }
 
@@ -194,7 +233,7 @@ export function useAttendance() {
       const dpw = state.daysPerWeek;
 
       setPrediction({
-        percentage: parseFloat(percentage.toFixed(2)),
+        percentage: parseFloat(pct.toFixed(2)),
         classesNeeded,
         bunksLeft,
         days: parseFloat((classesNeeded / cpd).toFixed(2)),
@@ -203,25 +242,18 @@ export function useAttendance() {
 
       return true;
     },
-    [state, result, validateSettings]
+    [state, validateSettings]
   );
-
-  const reset = useCallback(() => {
-    setState((prev) => ({ ...prev, presentCount: 0, totalCount: 0 }));
-    setResult(null);
-    setPrediction(null);
-    setError("");
-  }, []);
 
   return {
     state,
+    percentage,
     result,
     prediction,
     error,
     updateSettings,
     calculateAttendance,
     calculatePrediction,
-    reset,
     setError,
   };
 }
