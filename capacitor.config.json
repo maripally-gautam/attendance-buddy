@@ -1,9 +1,5 @@
 {
-  "appId": "app.lovable.017224274b2e40c19cfb335aa362a33c",
-  "appName": "Attendance Calculator",
-  "webDir": "dist",
-  "server": {
-    "url": "https://01722427-4b2e-40c1-9cfb-335aa362a33c.lovableproject.com?forceHideBadge=true",
-    "cleartext": true
-  }
+  "appId": "com.attendancebuddy.app",
+  "appName": "Attendance Buddy",
+  "webDir": "dist"
 }

@@ -28,7 +28,7 @@ const Index = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-foreground tracking-tight">
-            Attendance Calculator
+            Attendance Buddy
           </h1>
           <ThemeToggle />
         </div>
