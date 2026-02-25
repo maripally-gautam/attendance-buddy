@@ -10,9 +10,6 @@ export default function ResultCard({ result }: ResultCardProps) {
       <h2 className="text-sm font-semibold text-foreground tracking-wide uppercase">
         📊 Current Status
       </h2>
-      <div className="text-center">
-        <span className="text-3xl font-bold text-foreground">{result.percentage.toFixed(2)}%</span>
-      </div>
       <div className="grid grid-cols-2 gap-2 text-sm">
         <div className="rounded-lg bg-muted/50 p-3">
           <p className="text-muted-foreground text-[11px]">Classes Needed</p>

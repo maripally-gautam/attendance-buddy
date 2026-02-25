@@ -9,16 +9,14 @@ import ThemeToggle from "@/components/ThemeToggle";
 const Index = () => {
   const {
     state,
+    percentage,
     result,
     prediction,
     error,
     updateSettings,
     calculateAttendance,
     calculatePrediction,
-    reset,
   } = useAttendance();
-
-  const percentage = result?.percentage ?? 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-background">
@@ -58,16 +56,6 @@ const Index = () => {
           onPredict={calculatePrediction}
           prediction={prediction}
         />
-
-        {/* Reset */}
-        {result && (
-          <button
-            onClick={reset}
-            className="w-full rounded-xl border border-border bg-card text-muted-foreground py-3 text-sm font-medium active:scale-[0.98] transition-transform"
-          >
-            Reset Counters
-          </button>
-        )}
       </div>
     </div>
   );
